@@ -8,7 +8,6 @@ import { ArrowLeft, Building2, Home, Plus, Sparkles, Upload } from "lucide-react
 import { useRouter } from "next/navigation"
 import { generateText } from "ai"
 import { openai } from "@ai-sdk/openai"
-import { OPENAI_API_KEY } from "@/contexts/auth-context"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -150,8 +149,19 @@ export default function AddPlanPage() {
     setGenerationProgress(10)
 
     try {
-      // Configure OpenAI with API key
-      process.env.OPENAI_API_KEY = OPENAI_API_KEY
+      // Check if OpenAI API key is available
+      if (!openaiApiKey) {
+        toast({
+          title: "Error",
+          description: "OpenAI API key is not configured. Please set it in your account settings.",
+          variant: "destructive",
+        })
+        setIsGenerating(false)
+        return
+      }
+
+      // Configure OpenAI with API key from auth context
+      process.env.OPENAI_API_KEY = openaiApiKey
 
       // Step 1: Analyze the uploaded image
       setGenerationProgress(20)

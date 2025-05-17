@@ -7,19 +7,15 @@ import { doc, getDoc, setDoc } from "firebase/firestore"
 import { auth, db } from "@/lib/firebase"
 import { onAuthChange, registerUser, signIn } from "@/lib/auth"
 
-// Environment variables
-export const OPENAI_API_KEY =
-  "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" // Replace with your actual OpenAI API key
-
-// Define the admin email
-const ADMIN_EMAIL = "aricomhubllc@gmail.com"
+// Define the admin email from env vars
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || ''
 
 // Define the context type
 interface AuthContextType {
   user: User | null
   loading: boolean
   isAdmin: boolean
-  openaiApiKey: string
+  openaiApiKey: string | null
   login: (email: string, password: string) => Promise<{ success: boolean; error: any }>
   register: (email: string, password: string) => Promise<{ success: boolean; error: any }>
   logout: () => Promise<void>
@@ -33,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [openaiApiKey, setOpenaiApiKey] = useState<string | null>(null)
 
   // Check if the user is an admin
   const checkAdminStatus = async (user: User) => {
@@ -57,49 +54,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return false
   }
 
-  // Initialize the admin user if it doesn't exist
+  // No longer auto-creating admin users for security
   const initializeAdminUser = async () => {
-    try {
-      // Try to sign in as admin
-      const { user, error } = await signIn(ADMIN_EMAIL, "Aricom@2025")
-
-      if (error) {
-        // If admin doesn't exist, create it
-        console.log("Creating admin user...")
-        const { user: newUser, error: registerError } = await registerUser(ADMIN_EMAIL, "Aricom@2025")
-
-        if (registerError) {
-          console.error("Error creating admin user:", registerError)
-          return
-        }
-
-        if (newUser) {
-          // Set admin role in Firestore
-          await setDoc(doc(db, "users", newUser.uid), {
-            email: ADMIN_EMAIL,
-            role: "admin",
-            createdAt: new Date(),
-          })
-          console.log("Admin user created successfully")
-        }
-      } else {
-        console.log("Admin user already exists")
-      }
-    } catch (error) {
-      console.error("Error initializing admin user:", error)
-    }
+    // This is now a no-op - admin users must be created manually
   }
 
   // Initialize auth state listener
   useEffect(() => {
-    const unsubscribe = onAuthChange((user) => {
+    const unsubscribe = onAuthChange(async (user) => {
       setUser(user)
-      if (user) {
-        checkAdminStatus(user)
-      } else {
-        setIsAdmin(false)
+      try {
+        if (user) {
+          await checkAdminStatus(user)
+          const apiKey = await getUserApiKey(user.uid)
+          setOpenaiApiKey(apiKey)
+        } else {
+          setIsAdmin(false)
+          setOpenaiApiKey(null)
+        }
+      } catch (error) {
+        console.error("Error handling auth change:", error)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     })
 
     // Initialize admin user
@@ -162,10 +139,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     loading,
     isAdmin,
-    openaiApiKey: OPENAI_API_KEY,
+    openaiApiKey,
     login,
     register,
     logout,
+  }
+  
+  // Helper function to get user's API key from Firestore
+  async function getUserApiKey(uid: string): Promise<string | null> {
+    try {
+      const userRef = doc(db, "users", uid)
+      const userSnap = await getDoc(userRef)
+      return userSnap.exists() ? userSnap.data().openaiApiKey || null : null
+    } catch (error) {
+      console.error("Error getting user API key:", error)
+      return null
+    }
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -178,4 +167,16 @@ export const useAuth = () => {
     throw new Error("useAuth must be used within an AuthProvider")
   }
   return context
+}
+
+// Helper function to get user's API key from Firestore
+async function getUserApiKey(uid: string): Promise<string | null> {
+  try {
+    const userRef = doc(db, "users", uid)
+    const userSnap = await getDoc(userRef)
+    return userSnap.exists() ? userSnap.data().openaiApiKey || null : null
+  } catch (error) {
+    console.error("Error getting user API key:", error)
+    return null
+  }
 }

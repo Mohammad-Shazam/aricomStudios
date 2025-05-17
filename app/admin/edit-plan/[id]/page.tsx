@@ -6,6 +6,8 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, Building2, Home, Plus, Upload } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/contexts/auth-context"
+import { useToast } from "@/components/ui/use-toast"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -18,7 +20,21 @@ import { Textarea } from "@/components/ui/textarea"
 
 export default function EditPlanPage({ params }: { params: { id: string } }) {
   const router = useRouter()
+  const { toast } = useToast()
+  const { user, loading: authLoading, isAdmin } = useAuth()
   const planId = params.id
+
+  useEffect(() => {
+    // Redirect if not authenticated or not admin
+    if (!authLoading && (!user || !isAdmin)) {
+      router.push("/login")
+      toast({
+        title: "Access denied",
+        description: "You must be logged in as an admin to access this page.",
+        variant: "destructive",
+      })
+    }
+  }, [user, authLoading, isAdmin, router, toast])
 
   // In a real app, you would fetch the plan data based on the ID
   const [plan, setPlan] = useState({
